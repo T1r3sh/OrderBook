@@ -1,4 +1,4 @@
-from order_structs import OrderList, OrderStatus, Order, OrderIdGenerator
+from structures import OrderList, OrderStatus, Order, OrderIdGenerator
 import time
 
 
@@ -55,6 +55,8 @@ class OrderBook:
             and order.status != OrderStatus.EXPIRED
         ):
             raise ValueError("Order is not cancelled or expired")
+        order.listed = time.time()
+        order.status = OrderStatus.RESTORED
         matched = self.match(order)
         self.fill(order, matched)
 
@@ -132,9 +134,9 @@ class OrderBook:
         return matched
 
     def proceede(self):
-        order_tape = self.tape.copy()
+        tape = self.tape.copy()
         self.tape.clear()
-        return order_tape
+        return tape
 
     def pop_old(self, dtime):
         # remove order that epired or cancelled more than dtime ago
@@ -159,3 +161,52 @@ class OrderBook:
                     self.bid.remove(order)
                     counter += 1
         print("Removed ", counter, " orders")
+
+
+if __name__ == "__main__":
+    # Generate test data
+    # bids = [
+    #     Order(order_type="bid", price=100, volume=10, owner_id=1),
+    #     Order(order_type="bid", price=99, volume=5, owner_id=2),
+    #     Order(order_type="bid", price=98, volume=7, owner_id=2),
+    # ]
+
+    # asks = [
+    #     Order(order_type="ask", price=101, volume=8, owner_id=3),
+    #     Order(order_type="ask", price=102, volume=6, owner_id=4),
+    #     Order(order_type="ask", price=103, volume=4, owner_id=3),
+    # ]
+
+    # # Add bids and asks to the order book
+    order_book = OrderBook()
+    # for bid in bids:
+    #     order_book.add(bid)
+    # for ask in asks:
+    #     order_book.add(ask)
+
+    # # Print statistics
+    # print("Number of bids:", len(order_book.bid))
+    # print("Number of asks:", len(order_book.ask))
+    # print("Total bid volume:", sum(order.volume for order in order_book.bid))
+    # print("Total ask volume:", sum(order.volume for order in order_book.ask))
+    import random
+
+    # Generate additional test data
+    for _ in range(30):
+        order_type = random.choice(["bid", "ask"])
+        price = random.randint(90, 110)
+        volume = random.randint(5, 25)
+        owner_id = random.randint(1, 10)
+        order = Order(
+            order_type=order_type, price=price, volume=volume, owner_id=owner_id
+        )
+        order_book.add(order)
+    import pprint
+
+    pprint.pprint(order_book.tape)
+    print("Number of bids:", len(order_book.bid))
+    print("Number of asks:", len(order_book.ask))
+
+    pprint.pprint(order_book.bid)
+    print("___________")
+    pprint.pprint(order_book.ask)

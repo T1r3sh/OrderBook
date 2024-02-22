@@ -1,11 +1,8 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 import time
-from functools import total_ordering
 import os
 from sortedcontainers import SortedList
 from enum import Enum, auto
-import random
 
 
 class OrderIdGenerator:
@@ -44,6 +41,9 @@ class OrderIdGenerator:
         self.save_state()
 
 
+ID_GENERATOR = OrderIdGenerator()
+
+
 class OrderStatus(Enum):
     CREATED = auto()
     PARTIALLY_FILLED = auto()
@@ -57,12 +57,12 @@ class OrderStatus(Enum):
 @dataclass()
 class Order:
     order_type: str = field(compare=False)
-    security_name: str = field(compare=False)
+    # security_name: str = field(compare=False)
     price: float = field(compare=True)
     volume: int = field(compare=False)
     owner_id: int = field(compare=False)
     status: int = field(compare=False, default=OrderStatus.CREATED)
-    id: int = field(compare=False, default_factory=g_obj.__next__)
+    id: int = field(compare=False, default_factory=ID_GENERATOR.__next__)
     created: float = field(compare=False, default_factory=time.time)
     updated: float = field(compare=False, default_factory=time.time)
     listed: float = field(compare=False, default_factory=time.time)
@@ -106,7 +106,7 @@ class Order:
         return (
             f"Order № {self.id} \n"
             f"Order Type {self.order_type} \n"
-            f"Security: {self.security_name} \n"
+            # f"Security: {self.security_name} \n"
             f"Price: {self.price} \n"
             f"Volume: {self.volume} \n"
             f"Owner: {self.owner_id} \n"
@@ -185,7 +185,7 @@ class OrderList:
             return self.__order_list[cid:]
 
     def relist(self, order=None, order_id=None):
-        if not order and not order_id:
+        if not order and order_id is None:
             raise ValueError("Order or order_id must be provided")
         if order_id and order:
             print("Warning: both order and order_id are provided. Using order_id.")
@@ -204,7 +204,7 @@ class OrderList:
             raise ValueError("Order is active.")
 
     def remove(self, order=None, order_id=None):
-        if not order and not order_id:
+        if not order and order_id is None:
             raise ValueError("Order or order_id must be provided")
         if order_id and order:
             print("Warning: both order and order_id are provided. Using order_id.")
@@ -219,7 +219,7 @@ class OrderList:
         del self.__ids[order_id]
 
     def unlist(self, order=None, order_id=None, status=OrderStatus.EXPIRED):
-        if not order and not order_id:
+        if not order and order_id is None:
             raise ValueError("Order or order_id must be provided")
         if order_id and order:
             print("Warning: both order and order_id are provided. Using order_id.")

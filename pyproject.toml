@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "funex"
+version = "0.1.0"
+description = "virtual market for friends"
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+sortedcontainers = "^2.4.0"
+pydantic = "^2.6.1"
+
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^7.0.0"
+mypy = "^1.8.0"
+ipykernel = "^6.29.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,3 +1,6 @@
 current_state.txt
 b
 test.ipynb
+funex/test.py
+poetry.lock
+.gitignore
