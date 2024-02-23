@@ -1,5 +1,6 @@
-from dataclasses import dataclass, field
-import time
+from typing import Any, Optional, Union
+from pydantic import BaseModel, PositiveInt, PositiveFloat
+from datetime import datetime
 import os
 from sortedcontainers import SortedList
 from enum import Enum, auto
@@ -53,103 +54,74 @@ class OrderStatus(Enum):
     RESTORED = auto()
     EXPIRED = auto()
 
+    @property
+    def is_active(self):
+        return self in {
+            OrderStatus.CREATED,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.MODIFIED,
+            OrderStatus.RESTORED,
+        }
 
-@dataclass()
-class Order:
-    order_type: str = field(compare=False)
-    # security_name: str = field(compare=False)
-    price: float = field(compare=True)
-    volume: int = field(compare=False)
-    owner_id: int = field(compare=False)
-    status: int = field(compare=False, default=OrderStatus.CREATED)
-    id: int = field(compare=False, default_factory=ID_GENERATOR.__next__)
-    created: float = field(compare=False, default_factory=time.time)
-    updated: float = field(compare=False, default_factory=time.time)
-    listed: float = field(compare=False, default_factory=time.time)
 
-    def __eq__(self, other):
-        if isinstance(other, (int, float)):
-            return self.price == other
-        if isinstance(other, Order):
-            return self.price == other.price
-        return NotImplemented
+class OrderType(Enum):
+    ASK = "ask"
+    BID = "bid"
 
-    def __lt__(self, other):
+
+class Order(BaseModel):
+    id: PositiveInt
+    order_type: OrderType
+    price: PositiveFloat
+    volume: PositiveInt
+    owner_id: PositiveInt
+    status: Optional[OrderStatus] = None
+    created: Optional[datetime] = None
+    updated: Optional[datetime] = None
+    listed: Optional[datetime] = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if self.status is None:
+            self.status = OrderStatus.CREATED
+        now = datetime.now()
+        if self.created is None:
+            self.created = now
+        if self.updated is None:
+            self.updated = now
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name != "updated":
+            super().__setattr__("updated", datetime.now())
+        return super().__setattr__(name, value)
+
+    def __lt__(self, other: Union[int, float, "Order"]):
         if isinstance(other, (int, float)):
             return self.price < other
         if isinstance(other, Order):
             return self.price < other.price
         return NotImplemented
 
-    def __gt__(self, other):
+    def __gt__(self, other: Union[int, float, "Order"]):
         if isinstance(other, (int, float)):
             return self.price > other
         if isinstance(other, Order):
             return self.price > other.price
         return NotImplemented
 
-    def __le__(self, other):
+    def __le__(self, other: Union[int, float, "Order"]):
         if isinstance(other, (int, float)):
             return self.price <= other
         if isinstance(other, Order):
             return self.price <= other.price
         return NotImplemented
 
-    def __ge__(self, other):
+    def __ge__(self, other: Union[int, float, "Order"]):
         if isinstance(other, (int, float)):
             return self.price >= other
         if isinstance(other, Order):
             return self.price >= other.price
         return NotImplemented
-
-    def __repr__(self):
-        return (
-            f"Order № {self.id} \n"
-            f"Order Type {self.order_type} \n"
-            # f"Security: {self.security_name} \n"
-            f"Price: {self.price} \n"
-            f"Volume: {self.volume} \n"
-            f"Owner: {self.owner_id} \n"
-            f"Status: {self.status} \n"
-            f"Created: {self.created} \n"
-            f"listed: {self.listed} \n"
-            f"Last update: {self.updated} \n"
-        )
-
-    def __post_init__(self):
-        if self.volume <= 0:
-            raise ValueError("Volume must be positive")
-        if self.price <= 0:
-            raise ValueError("Price must be positive")
-        if self.order_type not in ["ask", "bid"]:
-            raise ValueError("Order type must be 'ask' or 'bid'")
-        if self.status not in OrderStatus:
-            raise ValueError("Invalid order status")
-        # self._initial_attrs = set(vars(self))
-        # super().__setattr__("_initial_attrs", self._initial_attrs)
-
-    def __setattr__(self, key, value):
-        # if key not in self._initial_attrs:
-        #     raise AttributeError(
-        #         f"Cannot add new attribute '{key}' to instance of {self.__class__.__name__}"
-        #     )
-        super().__setattr__(key, value)
-        if key != "updated":
-            super().__setattr__("updated", time.time())
-
-    def json(self):
-        return {
-            "order_type": self.order_type,
-            "security_name": self.security_name,
-            "price": self.price,
-            "volume": self.volume,
-            "owner_id": self.owner_id,
-            "status": self.status,
-            "id": self.id,
-            "created": self.created,
-            "listed": self.listed,
-            "updated": self.updated,
-        }
 
 
 class OrderList:
