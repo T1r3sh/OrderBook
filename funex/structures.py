@@ -1,12 +1,28 @@
+import os
+from datetime import datetime
+from enum import Enum, auto
 from typing import Any, Optional, Union, List
 from pydantic import BaseModel, PositiveInt, PositiveFloat
-from datetime import datetime
-import os
 from sortedcontainers import SortedList
-from enum import Enum, auto
 
 
 class OrderIdGenerator:
+    """
+    A class that generates unique order IDs.
+
+    Attributes:
+        filepath (str): The file path to store the current state of the ID counter.
+        id_counter (int): The current value of the ID counter.
+        iterations_since_last_save (int): The number of iterations since the last state save.
+        save_frequency (int): The frequency at which the state should be saved.
+
+    Methods:
+        __iter__(): Returns the iterator object itself.
+        __next__(): Returns the next unique order ID.
+        save_state(): Saves the current state of the ID counter to a file.
+        load_state(): Loads the previous state of the ID counter from a file.
+        reset_state(): Resets the ID counter to 0 and saves the state.
+    """
 
     def __init__(self):
         self.filepath = os.path.join(os.getcwd(), "current_state.txt")
@@ -27,18 +43,27 @@ class OrderIdGenerator:
 
         return current_id
 
-    def save_state(self):
+    def save_state(self) -> None:
+        """
+        Saves the current state of the ID counter to a file.
+        """
         with open(self.filepath, "w", encoding="utf-8") as f:
             f.write(str(self.id_counter))
 
-    def load_state(self):
+    def load_state(self) -> None:
+        """
+        Loads the previous state of the ID counter from a file.
+        """
         if not os.path.exists(self.filepath):
             return 0
         with open(self.filepath, "r", encoding="utf-8") as f:
             saved_state = f.read()
             return int(saved_state)
 
-    def reset_state(self):
+    def reset_state(self) -> None:
+        """
+        Resets the state of the object by setting the id_counter to 0 and saving the state.
+        """
         self.id_counter = 0
         self.save_state()
 
@@ -47,6 +72,23 @@ class OrderIdGenerator:
 
 
 class OrderStatus(Enum):
+    """
+    Enum representing the status of an order.
+
+    Attributes:
+        CREATED: The order has been created.
+        PARTIALLY_FILLED: The order has been partially filled.
+        FILLED: The order has been completely filled.
+        MODIFIED: The order has been modified.
+        CANCELLED: The order has been cancelled.
+        RESTORED: The order has been restored.
+        EXPIRED: The order has expired.
+
+    Methods:
+        is_active(): Checks if the order status is active.
+
+    """
+
     CREATED = auto()
     PARTIALLY_FILLED = auto()
     FILLED = auto()
@@ -57,6 +99,12 @@ class OrderStatus(Enum):
 
     @property
     def is_active(self):
+        """
+        Checks if the order status is active.
+
+        Returns:
+            bool: True if the order status is active, False otherwise.
+        """
         return self in {
             OrderStatus.CREATED,
             OrderStatus.PARTIALLY_FILLED,
@@ -65,7 +113,18 @@ class OrderStatus(Enum):
         }
 
 
+from enum import Enum
+
+
 class OrderType(Enum):
+    """
+    Enum representing the type of an order.
+
+    Attributes:
+        ASK (str): Represents an ask order.
+        BID (str): Represents a bid order.
+    """
+
     ASK = "ask"
     BID = "bid"
 
@@ -223,28 +282,18 @@ class OrderList:
             return self.__order_list[:cid]
         return self.__order_list[cid:]
 
-    def modify(
-        self,
-        order: Union[Order, int],
-        price: Optional[float] = None,
-        volume: Optional[int] = None,
-        order_status: Optional[OrderStatus] = None,
-        force_relist: bool = False,
-    ) -> None:
+    def unlist(self, order: Union[Order, int], order_status: OrderStatus) -> None:
         """
-        Modify an order based on provided parameters. Updates the order's price, volume, and/or status.
-        Conditions for relisting in the sorted list:
-        - If the order's status changes from active to non-active, it's removed.
-        - If the order's status changes from non-active to active, it's added.
-        - If the price changes and the order is active, it's re-added to update its position.
-        - Force relist if specified, regardless of other changes, but only if the order remains or becomes active.
+        Unlists the provided order by changing its status to the specified order_status.
 
-        :param order: The order or order ID to be modified.
-        :param price: The new price of the order, defaults to None.
-        :param volume: The new volume of the order, defaults to None.
-        :param order_status: The new status of the order, defaults to None.
-        :param force_relist: Forces the order to be re-added to the list, defaults to False.
-        :raises ValueError: If the order or order ID is invalid or not found.
+        :param order: The order to be unlisted. It can be either an Order object or an integer representing the order ID.
+        :type order: Union[Order, int]
+        :param order_status: The status to which the order will be changed.
+        :type order_status: OrderStatus
+        :raises ValueError: If the provided order ID is not found.
+        :raises ValueError: If the order type is invalid.
+        :raises ValueError: If the order is not active.
+        :raises ValueError: If the order_status is active.
         """
         if isinstance(order, int):
             order = self.__ids.get(order)
@@ -252,50 +301,39 @@ class OrderList:
                 raise ValueError("Provided order ID not found")
         elif not isinstance(order, Order):
             raise ValueError("Invalid order type")
+        if not order.status.is_active:
+            raise ValueError("Order is not active.")
+        if order_status.is_active:
+            raise ValueError("Order cannot be unlisted with active status.")
+        self.__order_list.remove(order)
+        order.status = order_status
 
-        needs_relist = False
-
-        if volume is not None:
-            order.volume = volume
-
-        if order_status is not None and order_status != order.status:
-            pre_status = order.status
-            order.status = order_status
-
-            if not order.status.is_active:
-                if pre_status.is_active:
-                    self.__order_list.remove(order)
-            else:  # status is active
-                needs_relist = True
-
-        # Handle price change
-        if price is not None and price != order.price:
-            order.price = price
-            if order.status.is_active:
-                needs_relist = True
-
-        # Relist if necessary
-        if (needs_relist or force_relist) and order.status.is_active:
-            # Ensure order is not already in the list due to prior operations
-            if order in self.__order_list:
-                self.__order_list.remove(order)
-            order.listed = datetime.now()
-            self.__order_list.add(order)
-
-    def relist(self, order: Union[Order, int]) -> None:
+    def relist(
+        self, order: Union[Order, int], order_status: OrderStatus = OrderStatus.RESTORED
+    ) -> None:
         """
-        Relist an order that is not active.
+        Relist an order with the specified order status.
 
-        :param order: order to be relisted, it can be either an order or an order id
+        :param order: The order to relist. Can be either an instance of Order or an order ID.
         :type order: Union[Order, int]
-        :raises ValueError: if provided order is invalid type
-        :raises ValueError: if order is not found
-        :raises ValueError: if order is active
+        :param order_status: The status to set for the relisted order, defaults to OrderStatus.RESTORED
+        :type order_status: OrderStatus, optional
+        :raises ValueError: If the provided order ID is not found.
+        :raises ValueError: If an invalid order type is provided.
+        :raises ValueError: If an active order is given a non-active status.
         """
-        try:
-            self.modify(order, order_status=OrderStatus.RESTORED)
-        except ValueError as e:
-            raise ValueError("Provided order not found") from e
+
+        if isinstance(order, int):
+            order = self.__ids.get(order)
+            if order is None:
+                raise ValueError("Provided order ID not found")
+        elif not isinstance(order, Order):
+            raise ValueError("Invalid order type")
+        if not order_status.is_active:
+            raise ValueError("Active order cannot have non-active status")
+        order.status = order_status
+        order.listed = datetime.now()
+        self.__order_list.add(order)
 
     def remove(self, order: Union[Order, int]) -> None:
         """
@@ -318,50 +356,124 @@ class OrderList:
         del self.__ids[order.id]
 
     def expire(self, order: Union[Order, int]) -> None:
-        try:
-            self.modify(order, order_status=OrderStatus.EXPIRED)
-        except ValueError as e:
-            raise ValueError("Provided order not found") from e
+        """
+        Expire an order.
+
+        :param order: The order to expire. It can be either an Order object or an order ID.
+        :type order: Union[Order, int]
+        :raises ValueError: If the provided order ID is not found.
+        :raises ValueError: If the order type is invalid.
+        :raises ValueError: If the order is not active.
+        """
+        if isinstance(order, int):
+            order = self.__ids.get(order)
+            if order is None:
+                raise ValueError("Provided order ID not found")
+        elif not isinstance(order, Order):
+            raise ValueError("Invalid order type")
+        if not order.status.is_active:
+            raise ValueError("Order is not active.")
+        self.__order_list.remove(order)
+        order.status = OrderStatus.EXPIRED
 
     def cancel(self, order: Union[Order, int]) -> None:
-        try:
-            self.modify(order, order_status=OrderStatus.CANCELLED)
-        except ValueError as e:
-            raise ValueError("Provided order not found") from e
+        """
+        Cancels an order.
 
-    def fill(self, order: Union[Order, int]) -> None:
-        try:
-            self.modify(order, order_status=OrderStatus.FILLED)
-        except ValueError as e:
-            raise ValueError("Provided order not found") from e
+        :param order: The order to be cancelled. It can be either an instance of the Order class or an integer representing the order ID.
+        :type order: Union[Order, int]
+        :raises ValueError: If the provided order ID is not found.
+        :raises ValueError: If an invalid order type is provided.
+        :raises ValueError: If the order is not active.
+        """
+        if isinstance(order, int):
+            order = self.__ids.get(order)
+            if order is None:
+                raise ValueError("Provided order ID not found")
+        elif not isinstance(order, Order):
+            raise ValueError("Invalid order type")
+        if not order.status.is_active:
+            raise ValueError("Order is not active.")
+        self.__order_list.remove(order)
+        order.status = OrderStatus.CANCELLED
 
-    # def unlist(self, order: Union[Order, int], status=OrderStatus.EXPIRED) -> None:
-    #     """
-    #     Unlist an active order.
+    def fill(self, order: Union[Order, int], volume: int) -> None:
+        """
+        Fill the order with the specified volume.
 
-    #     :param order: order to be unlisted, it can be either an order or an order id
-    #     :type order: Union[Order, int]
-    #     :param status: status to change, defaults to OrderStatus.EXPIRED
-    #     :type status: _type_, optional
-    #     :raises ValueError: _description_
-    #     :raises ValueError: _description_
-    #     :raises ValueError: _description_
-    #     """
-    #     if isinstance(order, int):
-    #         order_id = order
-    #     elif isinstance(order, Order):
-    #         order_id = order.id
-    #     else:
-    #         raise ValueError("Invalid order")
-    #     try:
-    #         order = self.__ids[order_id]
-    #     except KeyError as e:
-    #         raise ValueError("Provided order not found") from e
-    #     if not order.status.is_active:
-    #         raise ValueError("Order is not active.")
-    #     else:
-    #         order.status = status
-    #         self.__order_list.remove(order)
+        :param order: The order to be filled. It can be either an Order object or an order ID (int).
+        :type order: Union[Order, int]
+        :param volume: The volume to be filled.
+        :type volume: int
+        :raises ValueError: If the volume is not positive.
+        :raises ValueError: If the provided order ID is not found.
+        :raises ValueError: If the order type is invalid.
+        :raises ValueError: If the order is not active.
+        :raises ValueError: If the volume is greater than the order volume.
+        """
+        if volume <= 0:
+            raise ValueError("Volume must be positive")
+        if isinstance(order, int):
+            order = self.__ids.get(order)
+            if order is None:
+                raise ValueError("Provided order ID not found")
+        elif not isinstance(order, Order):
+            raise ValueError("Invalid order type")
+        if not order.status.is_active:
+            raise ValueError("Order is not active.")
+        if volume > order.volume:
+            raise ValueError("Volume is greater than order volume")
+        order.volume -= volume
+        if order.volume == 0:
+            self.unlist(order, OrderStatus.FILLED)
+        else:
+            order.status = OrderStatus.PARTIALLY_FILLED
+
+    def modify(
+        self,
+        order: Union[Order, int],
+        price: Optional[float] = None,
+        volume: Optional[int] = None,
+        relist: bool = True,
+    ) -> None:
+        """
+        Modify an order by updating its price and/or volume.
+
+        :param order: The order to modify. Can be an instance of Order or an order ID.
+        :type order: Union[Order, int]
+        :param price: The new price for the order, defaults to None.
+        :type price: Optional[float], optional
+        :param volume: The new volume for the order, defaults to None.
+        :type volume: Optional[int], optional
+        :param relist: Whether to relist the order after modification, defaults to True.
+        :type relist: bool, optional
+        :raises ValueError: If price or volume is not positive.
+        :raises ValueError: If the provided order ID is not found.
+        :raises ValueError: If the order type is invalid.
+        """
+        if any([price <= 0, volume <= 0]):
+            raise ValueError("Price and volume must be positive")
+        if isinstance(order, int):
+            order = self.__ids.get(order)
+            if order is None:
+                raise ValueError("Provided order ID not found")
+        elif not isinstance(order, Order):
+            raise ValueError("Invalid order type")
+
+        if relist:
+            if order.status.is_active:
+                self.__order_list.remove(order)
+            else:
+                print("Warning: Order is not active, it will not be relisted")
+                relist = False
+        order = self.__ids[order.id]
+        if price is not None:
+            order.price = price
+        if volume is not None:
+            order.volume = volume
+        if relist:
+            order.status = OrderStatus.MODIFIED
+            self.__order_list.add(order)
 
     def clear(self) -> None:
         """
