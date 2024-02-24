@@ -292,22 +292,10 @@ class OrderList:
         :raises ValueError: if order is not found
         :raises ValueError: if order is active
         """
-        if isinstance(order, int):
-            order_id = order
-        elif isinstance(order, Order):
-            order_id = order.id
-        else:
-            raise ValueError("Invalid order")
         try:
-            order = self.__ids[order_id]
-        except KeyError as e:
-            raise ValueError("Order with provided id not found") from e
-        if order.status.is_active:
-            raise ValueError("Order is active.")
-        else:
-            order.listed = datetime.now()
-            order.status = OrderStatus.RESTORED
-            self.__order_list.add(order)
+            self.modify(order, order_status=OrderStatus.RESTORED)
+        except ValueError as e:
+            raise ValueError("Provided order not found") from e
 
     def remove(self, order: Union[Order, int]) -> None:
         """
@@ -319,48 +307,66 @@ class OrderList:
         :raises ValueError: if order is not found
         """
         if isinstance(order, int):
-            order_id = order
-        elif isinstance(order, Order):
-            order_id = order.id
-        else:
-            raise ValueError("Invalid order")
-        try:
-            order = self.__ids[order_id]
-        except KeyError as e:
-            raise ValueError("Provided order not found") from e
+            order = self.__ids.get(order)
+            if order is None:
+                raise ValueError("Provided order ID not found")
+        elif not isinstance(order, Order):
+            raise ValueError("Invalid order type")
+
         if order.status.is_active:
             self.__order_list.remove(order)
-        del self.__ids[order_id]
+        del self.__ids[order.id]
 
-    def unlist(self, order: Union[Order, int], status=OrderStatus.EXPIRED) -> None:
-        """
-        Unlist an active order.
-
-        :param order: order to be unlisted, it can be either an order or an order id
-        :type order: Union[Order, int]
-        :param status: status to change, defaults to OrderStatus.EXPIRED
-        :type status: _type_, optional
-        :raises ValueError: _description_
-        :raises ValueError: _description_
-        :raises ValueError: _description_
-        """
-        if isinstance(order, int):
-            order_id = order
-        elif isinstance(order, Order):
-            order_id = order.id
-        else:
-            raise ValueError("Invalid order")
+    def expire(self, order: Union[Order, int]) -> None:
         try:
-            order = self.__ids[order_id]
-        except KeyError as e:
+            self.modify(order, order_status=OrderStatus.EXPIRED)
+        except ValueError as e:
             raise ValueError("Provided order not found") from e
-        if not order.status.is_active:
-            raise ValueError("Order is not active.")
-        else:
-            order.status = status
-            self.__order_list.remove(order)
+
+    def cancel(self, order: Union[Order, int]) -> None:
+        try:
+            self.modify(order, order_status=OrderStatus.CANCELLED)
+        except ValueError as e:
+            raise ValueError("Provided order not found") from e
+
+    def fill(self, order: Union[Order, int]) -> None:
+        try:
+            self.modify(order, order_status=OrderStatus.FILLED)
+        except ValueError as e:
+            raise ValueError("Provided order not found") from e
+
+    # def unlist(self, order: Union[Order, int], status=OrderStatus.EXPIRED) -> None:
+    #     """
+    #     Unlist an active order.
+
+    #     :param order: order to be unlisted, it can be either an order or an order id
+    #     :type order: Union[Order, int]
+    #     :param status: status to change, defaults to OrderStatus.EXPIRED
+    #     :type status: _type_, optional
+    #     :raises ValueError: _description_
+    #     :raises ValueError: _description_
+    #     :raises ValueError: _description_
+    #     """
+    #     if isinstance(order, int):
+    #         order_id = order
+    #     elif isinstance(order, Order):
+    #         order_id = order.id
+    #     else:
+    #         raise ValueError("Invalid order")
+    #     try:
+    #         order = self.__ids[order_id]
+    #     except KeyError as e:
+    #         raise ValueError("Provided order not found") from e
+    #     if not order.status.is_active:
+    #         raise ValueError("Order is not active.")
+    #     else:
+    #         order.status = status
+    #         self.__order_list.remove(order)
 
     def clear(self) -> None:
+        """
+        Clears the collection of all orders.
+        """
         self.__order_list.clear()
         self.__ids.clear()
 
