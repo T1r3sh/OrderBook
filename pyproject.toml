@@ -16,6 +16,7 @@ pydantic = "^2.6.1"
 flake8 = "^7.0.0"
 mypy = "^1.8.0"
 ipykernel = "^6.29.2"
+pytest = "^8.0.2"
 
 [build-system]
 requires = ["poetry-core"]

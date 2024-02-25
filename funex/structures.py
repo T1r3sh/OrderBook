@@ -396,16 +396,7 @@ class OrderList:
         :raises ValueError: If the order type is invalid.
         :raises ValueError: If the order is not active.
         """
-        if isinstance(order, int):
-            order = self.__ids.get(order)
-            if order is None:
-                raise ValueError("Provided order ID not found")
-        elif not isinstance(order, Order):
-            raise ValueError("Invalid order type")
-        if not order.status.is_active:
-            raise ValueError("Order is not active.")
-        self.__order_list.remove(order)
-        order.status = OrderStatus.EXPIRED
+        self.unlist(order, OrderStatus.EXPIRED)
 
     def cancel(self, order: Union[Order, int]) -> None:
         """
@@ -417,16 +408,7 @@ class OrderList:
         :raises ValueError: If an invalid order type is provided.
         :raises ValueError: If the order is not active.
         """
-        if isinstance(order, int):
-            order = self.__ids.get(order)
-            if order is None:
-                raise ValueError("Provided order ID not found")
-        elif not isinstance(order, Order):
-            raise ValueError("Invalid order type")
-        if not order.status.is_active:
-            raise ValueError("Order is not active.")
-        self.__order_list.remove(order)
-        order.status = OrderStatus.CANCELLED
+        self.unlist(order, OrderStatus.CANCELLED)
 
     def fill(self, order: Union[Order, int], volume: int) -> None:
         """
