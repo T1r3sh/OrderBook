@@ -113,9 +113,6 @@ class OrderStatus(Enum):
         }
 
 
-from enum import Enum
-
-
 class OrderType(Enum):
     """
     Enum representing the type of an order.
@@ -130,6 +127,29 @@ class OrderType(Enum):
 
 
 class Order(BaseModel):
+    """
+    Represents an order in the order book.
+
+    :param id: The unique identifier of the order.
+    :type id: int
+    :param order_type: The type of the order (buy or sell).
+    :type order_type: OrderType
+    :param price: The price of the order.
+    :type price: float
+    :param volume: The volume of the order.
+    :type volume: int
+    :param owner_id: The ID of the owner of the order.
+    :type owner_id: int
+    :param status: The status of the order (optional).
+    :type status: OrderStatus, optional
+    :param created: The timestamp when the order was created (optional).
+    :type created: datetime, optional
+    :param updated: The timestamp when the order was last updated (optional).
+    :type updated: datetime, optional
+    :param listed: The timestamp when the order was listed (optional).
+    :type listed: datetime, optional
+    """
+
     id: PositiveInt
     order_type: OrderType
     price: PositiveFloat
@@ -239,6 +259,17 @@ class OrderList:
         else:
             raise ValueError("Invalid value for tolist")
         self.__ids[order.id] = order
+
+    def get(self, order_id: int) -> Optional[Order]:
+        """
+        Gets an order by its ID.
+
+        :param order_id: The ID of the order to retrieve.
+        :type order_id: int
+        :return: The order with the specified ID, if found; otherwise, None.
+        :rtype: Optional[Order]
+        """
+        return self.__ids.get(order_id)
 
     def bisect_left(
         self, order: Union[Order, float], include_right: bool = True

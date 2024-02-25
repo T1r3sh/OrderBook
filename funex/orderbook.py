@@ -1,34 +1,68 @@
-from structures import OrderList, OrderStatus, Order, OrderIdGenerator
-import time
+from datetime import datetime
+from typing import List, Optional, Union
+
+from structures import OrderList, OrderStatus, Order, OrderType, OrderIdGenerator
 
 
 class OrderBook:
+
     def __init__(self):
 
         self.ask = OrderList()
         self.bid = OrderList()
-        self.order_sources = {"ask": self.ask, "bid": self.bid}
+        self.order_sources = {OrderType.ASK: self.ask, OrderType.BID: self.bid}
         self.tape = []
 
-    def add(self, order):
-        order.listed = time.time()
-        self.order_sources[order.order_type].add(order, tolist=False)
+    def add(self, order: Order) -> None:
+        order.listed = datetime.now()
+        self.order_sources[order.order_type].add(order)
         matched = self.match(order)
         self.fill(order, matched)
 
-    def get_order(self, order_id, order_type=None):
-        if order_type in self.order_sources:
-            return self.order_sources[order_type].get(order_id)
-        else:
-            try:
-                return self.ask.get(order_id)
-            except ValueError:
-                try:
-                    return self.bid.get(order_id)
-                except ValueError:
-                    raise ValueError("Order not found")
+    def fill(self, order: Order, counter_orders: List[Order]) -> None:
+        if not counter_orders:
+            print("Warning: No counter orders were provided.")
+            self.order_sources[order.order_type].add(order)
+            return
+        source = self.order_sources[order.order_type]
+        c_source = self.order_sources[counter_orders[0].order_type]
+        for c_order in counter_orders:
+            price = c_order.price
+            volume = min(order.volume, c_order.volume)
+            source.fill(order, volume)
+            c_source.fill(c_order, volume)
+            self.tape.append(
+                {
+                    "order": order.id,
+                    "contr_order": c_order.id,
+                    "price": price,
+                    "volume": volume,
+                    "time": datetime.now(),
+                }
+            )
+            if order.status == OrderStatus.FILLED:
+                break
 
-    def cancel(self, order_id, order_type=None):
+    def search_order(
+        self, order: Union[Order, int], order_type: Optional[OrderType] = None
+    ):
+        pass
+
+    def get_order(
+        self, order: Union[int, Order], order_type: OrderType
+    ) -> Optional[Order]:
+        order_ = None
+        if isinstance(order, int):
+            order_ = self.order_sources[order_type].get(order)
+        elif isinstance(order, Order):
+            order_ = self.order_sources[order.order_type].get(order.id)
+        else:
+            raise ValueError("Invalid order type")
+        if not order_:
+            raise ValueError("Order not found")
+        return order_
+
+    def cancel(self, order: Union[Order, int], order_type: OrderType = None):
         order = self.get_order(order_id, order_type)
         if not order:
             raise ValueError("Order not found")
@@ -86,45 +120,7 @@ class OrderBook:
         matched = self.match(order)
         self.fill(order, matched)
 
-    def fill(self, order, counter_orders):
-        if not counter_orders:
-            print("Warning: No counter orders were provided.")
-            self.order_sources[order.order_type].add(order)
-            return
-        source = self.order_sources[counter_orders[0].order_type]
-        exit_flag = False
-        for c_order in counter_orders:
-            price = c_order.price
-            volume = c_order.volume
-            if c_order.volume >= order.volume:
-                volume = order.volume
-                c_order.volume -= order.volume
-                # filling order is already unlisted so no need to unlist it again
-                order.volume = 0
-                order.status = OrderStatus.FILLED
-                if c_order.volume == 0:
-                    source.unlist(order_id=c_order.id, status=OrderStatus.FILLED)
-                else:
-                    c_order.status = OrderStatus.PARTIALLY_FILLED
-                exit_flag = True
-            else:
-                order.volume -= c_order.volume
-                source.unlist(order_id=c_order.id, status=OrderStatus.FILLED)
-            self.tape.append(
-                {
-                    "order": order.id,
-                    "contr_order": c_order.id,
-                    "price": price,
-                    "volume": volume,
-                    "time": time.time(),
-                }
-            )
-            if exit_flag:
-                break
-        if order.volume > 0:
-            self.order_sources[order.order_type].add(order)
-
-    def match(self, order):
+    def match(self, order: Order) -> List[Order]:
         matched = []
         if order.order_type == "ask":
             matched = self.bid.bisect_left(order)
